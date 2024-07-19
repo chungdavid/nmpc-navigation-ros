@@ -1,0 +1,9 @@
+nmpc_navigation_ros:
+  ros__parameters:
+    drive_topic: "/drive"
+    odom_topic: "/ego_racecar/odom"
+    vis_global_path_topic: "/vis_global_path"
+
+    target_pos_topic: "/target_pos" # read a target pos from target_pos_topic, and generate a global path to it
+    use_csv_global_path: true # alternatively, use a precomputed global path and disable target_pos_topic
+    global_path_csv_filename: "/sim_ws/src/f1tenth_gym_ros/maps/Budapest_centerline.csv"

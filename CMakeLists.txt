@@ -17,9 +17,44 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
+
+foreach(PACKAGE
+  rclcpp
+  geometry_msgs
+  nav_msgs
+  ackermann_msgs
+  visualization_msgs)
+  find_package(${PACKAGE} REQUIRED)
+endforeach()
+
+include_directories(include)
+
+add_library(nmpc_navigation src/nmpc_navigation.cpp)
+
+add_library(nmpc_navigation_ros src/nmpc_navigation_ros.cpp)
+ament_target_dependencies(nmpc_navigation_ros
+  rclcpp
+  geometry_msgs
+  nav_msgs
+  ackermann_msgs
+  visualization_msgs
+)
+target_link_libraries(nmpc_navigation_ros
+  nmpc_navigation
+)
+
+add_executable(nmpc_navigation_node src/nmpc_navigation_node.cpp)
+
+target_link_libraries(nmpc_navigation_node nmpc_navigation_ros)
+
+# Install executables
+install(TARGETS nmpc_navigation_node DESTINATION lib/${PROJECT_NAME})
+
+# Install launch files
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
+
+# Install config files
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
