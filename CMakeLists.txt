@@ -19,6 +19,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 
 foreach(PACKAGE
+  eigen3_cmake_module  
+  Eigen3
   rclcpp
   geometry_msgs
   nav_msgs
@@ -30,6 +32,7 @@ endforeach()
 include_directories(include)
 
 add_library(nmpc_navigation src/nmpc_navigation.cpp)
+target_include_directories(nmpc_navigation PUBLIC ${Eigen3_INCLUDE_DIRS})
 
 add_library(nmpc_navigation_ros src/nmpc_navigation_ros.cpp)
 ament_target_dependencies(nmpc_navigation_ros

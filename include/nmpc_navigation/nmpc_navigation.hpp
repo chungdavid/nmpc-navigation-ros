@@ -1,16 +1,13 @@
 #pragma once
 
 #include <vector>
+#include <Eigen/Dense>
 
-typedef struct {
-    double x;
-    double y;
-} Point;
-
-typedef struct {
-    std::vector<Point> points;
+struct GlobalPath {
+    Eigen::VectorXd X;
+    Eigen::VectorXd Y;
     int num_points;
-} Path;
+};
 
 class NmpcNavigation
 {
@@ -18,9 +15,9 @@ public:
     NmpcNavigation();
     ~NmpcNavigation();
 
-    void initGlobalPath(const Path& global_path);
-    const Path& getGlobalPath() const;
+    void setGlobalPath(std::vector<double>& x_in, std::vector<double>& y_in);
+    const GlobalPath& getGlobalPath() const;
 
 private:
-    Path global_path_;
+    GlobalPath global_path_;
 };

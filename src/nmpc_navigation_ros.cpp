@@ -7,7 +7,8 @@
 using std::placeholders::_1;
 
 NmpcNavigationRos::NmpcNavigationRos()
-    : Node("nmpc_navigation_ros")
+    : Node("nmpc_navigation_ros"),
+      nmpc_navigation_()
 {
     // Declare parameters
     this->declare_parameter("odom_topic", "/ego_racecar/odom");
@@ -32,6 +33,8 @@ NmpcNavigationRos::NmpcNavigationRos()
     sub_odom_ = this->create_subscription<nav_msgs::msg::Odometry>(odom_topic_, 10, std::bind(&NmpcNavigationRos::odom_callback, this, _1));
     pub_vis_global_path_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(vis_global_path_topic_, 10);
 
+    // If user decides to use a global path computed offline, load it from CSV file. Otherwise,
+    // generate a global path online whenever a target_pos is published.
     if(use_csv_global_path) {
         load_global_path_from_csv(global_path_csv_filename);
     } else {
@@ -60,7 +63,8 @@ void NmpcNavigationRos::load_global_path_from_csv(std::string filename)
         RCLCPP_INFO(this->get_logger(), "CSV File Opened");
     }
 
-    Path global_path; //where the CSV data will be loaded
+    std::vector<double> x_in; // where the x values form the CSV will be stored
+    std::vector<double> y_in; // where the y values form the CSV will be stored
     std::string line, word;
 
     while (!csvfile.eof()) {
@@ -68,31 +72,29 @@ void NmpcNavigationRos::load_global_path_from_csv(std::string filename)
         std::stringstream s(line);
 
         int j = 0;
-        Point point;
         while(std::getline(s, word, ',')) {
             if (!word.empty()) {
                 if (j == 0) {
-                    point.x = std::stod(word);
+                    x_in.push_back(std::stod(word));
                 } else if (j == 1) {
-                    point.y = std::stod(word);
+                    y_in.push_back(std::stod(word));
                 }
             }
             j++;
         }
-        global_path.points.push_back(point);
     }
 
+    if(x_in.size() != y_in.size()) {
+        RCLCPP_ERROR(this->get_logger(), "CSV file has a differnt number of X and Y values! Check that your CSV file is correct.");
+    }
+    nmpc_navigation_.setGlobalPath(x_in, y_in);
     csvfile.close();
-
-    global_path.num_points = global_path.points.size();
-    nmpc_navigation_.initGlobalPath(global_path);
-
-    RCLCPP_INFO(this->get_logger(), "Finished loading %d points from %s", global_path.num_points, filename.c_str());
+    RCLCPP_INFO(this->get_logger(), "Finished loading %d points from %s", x_in.size(), filename.c_str());
 }
 
 void NmpcNavigationRos::visualize_global_path()
 {
-    Path global_path = nmpc_navigation_.getGlobalPath(); // path to visualize
+    GlobalPath global_path = nmpc_navigation_.getGlobalPath(); // path to visualize
 
     visualization_msgs::msg::MarkerArray marker_array;
     visualization_msgs::msg::Marker dots;
@@ -110,8 +112,8 @@ void NmpcNavigationRos::visualize_global_path()
 
     for (int i = 0; i < global_path.num_points; ++i) {
         geometry_msgs::msg::Point p;
-        p.x = global_path.points[i].x;
-        p.y = global_path.points[i].y;;
+        p.x = global_path.X(i);
+        p.y = global_path.Y(i);
         dots.points.push_back(p);
     }
 
