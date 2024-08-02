@@ -25,7 +25,8 @@ foreach(PACKAGE
   geometry_msgs
   nav_msgs
   ackermann_msgs
-  visualization_msgs)
+  visualization_msgs
+  OsqpEigen)
   find_package(${PACKAGE} REQUIRED)
 endforeach()
 

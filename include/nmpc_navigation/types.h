@@ -4,6 +4,7 @@
 #include <unsupported/Eigen/MatrixFunctions>
 #include <vector>
 #include <iostream>
+#include <cmath>
 
 namespace nmpcnav {
 
@@ -54,9 +55,9 @@ struct GlobalPath {
     
     GlobalPath() : X(0), Y(0), num_points(0), s(0), L(0) { }
 
-    GlobalPath(std::vector<double> x_in, std::vector<double> y_in) {
-        X = Eigen::Map<Eigen::VectorXd>(x_in.data(), x_in.size());
-        Y = Eigen::Map<Eigen::VectorXd>(y_in.data(), y_in.size());
+    GlobalPath(const std::vector<double>& x_in, const std::vector<double>& y_in) {
+        X = Eigen::Map<const Eigen::VectorXd>(x_in.data(), x_in.size());
+        Y = Eigen::Map<const Eigen::VectorXd>(y_in.data(), y_in.size());
         num_points = x_in.size();
         s = Eigen::VectorXd::Zero(num_points);
         for(int i = 0; i < num_points - 1; ++i) {
@@ -101,6 +102,7 @@ struct GlobalPath {
     }
 };
 
+// Note: use more accurate dynamics models in the future
 struct Model {
     double Ts;
     double L_F;
@@ -126,7 +128,7 @@ struct Model {
             dy = input.v * sin(traj.phi(i));
             traj.X(i+1) = traj.X(i) + Ts*dx;
             traj.Y(i+1) = traj.Y(i) + Ts*dy;
-            traj.phi(i+1) = traj.phi(i) + Ts*dphi;
+            traj.phi(i+1) = std::remainder(traj.phi(i) + Ts*dphi, 2.0*M_PI);
         }
 
         traj.input_ref = input;
@@ -183,9 +185,12 @@ struct Config {
     int N;
     int lib_num_v;
     int lib_num_delta;
-    double Q_X;
-    double Q_Y;
-    double Q_phi; 
+    double QN_X;
+    double QN_Y;
+    double QN_phi; 
+    double Qk_X;
+    double Qk_Y;
+    double Qk_phi; 
     double R_v;
     double R_delta; 
 };

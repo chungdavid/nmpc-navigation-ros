@@ -20,6 +20,7 @@ NmpcNavigationRos::NmpcNavigationRos()
     // Declare and get node specific parameters
     this->declare_parameter("node_config.drive_topic", "/drive");
     this->declare_parameter("node_config.odom_topic", "/ego_racecar/odom");
+    this->declare_parameter("node_config.map_topic", "/map");
     this->declare_parameter("node_config.vis_global_path_topic", "/vis_global_path");
     this->declare_parameter("node_config.vis_local_traj_topic", "/vis_local_traj");
     this->declare_parameter("node_config.target_pos_topic", "/target_pos");
@@ -28,6 +29,7 @@ NmpcNavigationRos::NmpcNavigationRos()
 
     drive_topic_ = this->get_parameter("node_config.drive_topic").as_string();
     odom_topic_ = this->get_parameter("node_config.odom_topic").as_string();
+    map_topic_ = this->get_parameter("node_config.map_topic").as_string();
     vis_global_path_topic_ = this->get_parameter("node_config.vis_global_path_topic").as_string();
     vis_local_traj_topic_ = this->get_parameter("node_config.vis_local_traj_topic").as_string();
     target_pos_topic_ = this->get_parameter("node_config.target_pos_topic").as_string();
@@ -35,8 +37,12 @@ NmpcNavigationRos::NmpcNavigationRos()
     std::string global_path_csv_filename = this->get_parameter("node_config.global_path_csv_filename").as_string();
 
     // Create publishers and subscribers
-    pub_drive_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic_, 10);
-    sub_odom_ = this->create_subscription<nav_msgs::msg::Odometry>(odom_topic_, 1, std::bind(&NmpcNavigationRos::odom_callback, this, _1));
+    auto map_qos = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
+    auto odom_qos = rclcpp::SensorDataQoS();
+
+    pub_drive_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic_, 1);
+    sub_odom_ = this->create_subscription<nav_msgs::msg::Odometry>(odom_topic_, odom_qos, std::bind(&NmpcNavigationRos::odom_callback, this, _1));
+    sub_map_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(map_topic_, map_qos, std::bind(&NmpcNavigationRos::map_callback, this, _1));
     pub_vis_global_path_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(vis_global_path_topic_, 10);
     pub_vis_local_traj_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(vis_local_traj_topic_, 10);
     sub_target_pos_ = this->create_subscription<geometry_msgs::msg::Point>(target_pos_topic_, 10, std::bind(&NmpcNavigationRos::target_pos_callback, this, _1));
@@ -46,6 +52,7 @@ NmpcNavigationRos::NmpcNavigationRos()
         load_global_path_from_csv(global_path_csv_filename);
         while(pub_vis_global_path_->get_subscription_count() < 1) {
             RCLCPP_WARN_ONCE(this->get_logger(), "pub_vis_global_path has no subscribers. Waiting for a connection before visualizing the global path.");
+            rclcpp::sleep_for(std::chrono::milliseconds(500));
         }
         visualize_global_path();
         // visualize_local_traj_lib();
@@ -55,8 +62,7 @@ NmpcNavigationRos::NmpcNavigationRos()
 
 NmpcNavigationRos::~NmpcNavigationRos() { }
 
-nmpcnav::Config NmpcNavigationRos::get_nmpc_config()
-{
+nmpcnav::Config NmpcNavigationRos::get_nmpc_config() {
     // Declare and get nmpc controller specific parameters
     this->declare_parameter("nmpc_config.car_max_speed", 8.0);
     this->declare_parameter("nmpc_config.car_max_steering_angle", 1.25);
@@ -71,6 +77,15 @@ nmpcnav::Config NmpcNavigationRos::get_nmpc_config()
     this->declare_parameter("nmpc_config.traj_lib_num_speed", 30);
     this->declare_parameter("nmpc_config.traj_lib_num_steer", 30);
 
+    this->declare_parameter("nmpc_config.QN_X", 1.0);
+    this->declare_parameter("nmpc_config.QN_Y", 1.0);
+    this->declare_parameter("nmpc_config.QN_phi", 1.0);
+    this->declare_parameter("nmpc_config.Qk_X", 1.0);
+    this->declare_parameter("nmpc_config.Qk_Y", 1.0);
+    this->declare_parameter("nmpc_config.Qk_phi", 1.0);
+    this->declare_parameter("nmpc_config.R_v", 1.0);
+    this->declare_parameter("nmpc_config.R_delta", 1.0);
+
     double v_max = this->get_parameter("nmpc_config.car_max_speed").as_double();
     double delta_max = this->get_parameter("nmpc_config.car_max_steering_angle").as_double();
     double accel_max = this->get_parameter("nmpc_config.car_max_accel").as_double();
@@ -84,6 +99,15 @@ nmpcnav::Config NmpcNavigationRos::get_nmpc_config()
     int lib_num_v = this->get_parameter("nmpc_config.traj_lib_num_speed").as_int();
     int lib_num_delta = this->get_parameter("nmpc_config.traj_lib_num_steer").as_int();
 
+    double QN_X = this->get_parameter("nmpc_config.QN_X").as_double();
+    double QN_Y = this->get_parameter("nmpc_config.QN_Y").as_double();
+    double QN_phi = this->get_parameter("nmpc_config.QN_phi").as_double();
+    double Qk_X = this->get_parameter("nmpc_config.Qk_X").as_double();
+    double Qk_Y = this->get_parameter("nmpc_config.Qk_Y").as_double();
+    double Qk_phi = this->get_parameter("nmpc_config.Qk_phi").as_double();
+    double R_v = this->get_parameter("nmpc_config.R_v").as_double();
+    double R_delta = this->get_parameter("nmpc_config.R_delta").as_double();
+
     // Init main program nmpc_navigation_ with params
     nmpcnav::Config nmpc_config {
         v_max,
@@ -96,14 +120,21 @@ nmpcnav::Config NmpcNavigationRos::get_nmpc_config()
         Ts,
         N,
         lib_num_v,
-        lib_num_delta
+        lib_num_delta,
+        QN_X,
+        QN_Y,
+        QN_phi, 
+        Qk_X,
+        Qk_Y,
+        Qk_phi, 
+        R_v,
+        R_delta 
     };
 
     return nmpc_config;
 }
 
-void NmpcNavigationRos::load_global_path_from_csv(std::string filename)
-{
+void NmpcNavigationRos::load_global_path_from_csv(std::string filename) {
     // Create file object
     std::fstream csvfile;
     csvfile.open(filename, std::ios::in);
@@ -145,8 +176,7 @@ void NmpcNavigationRos::load_global_path_from_csv(std::string filename)
     RCLCPP_INFO(this->get_logger(), "Finished loading %d points from %s", x_in.size(), filename.c_str());
 }
 
-void NmpcNavigationRos::visualize_global_path()
-{
+void NmpcNavigationRos::visualize_global_path() {
     const nmpcnav::GlobalPath& global_path = nmpc_navigation_.getGlobalPath(); // path to visualize
 
     visualization_msgs::msg::MarkerArray marker_array;
@@ -176,8 +206,7 @@ void NmpcNavigationRos::visualize_global_path()
     RCLCPP_INFO(this->get_logger(), "Finished visualizing %d points from the global path", dots.points.size());
 }
 
-void NmpcNavigationRos::visualize_local_traj_ref()
-{
+void NmpcNavigationRos::visualize_local_traj_ref() {
     const nmpcnav::LocalTrajectory& local_traj = nmpc_navigation_.getLocalTrajectoryRef();
 
     visualization_msgs::msg::MarkerArray marker_array;
@@ -188,9 +217,9 @@ void NmpcNavigationRos::visualize_local_traj_ref()
     dots.type = visualization_msgs::msg::Marker::POINTS;
     dots.action = visualization_msgs::msg::Marker::ADD;
     dots.header.stamp = rclcpp::Clock().now();    
-    dots.scale.x = 0.1;
-    dots.scale.y = 0.1;
-    dots.scale.z = 0.1;
+    dots.scale.x = 0.025;
+    dots.scale.y = 0.025;
+    dots.scale.z = 0.025;
     dots.color.a = 1.0;
     dots.color.r = 1.0;
 
@@ -205,8 +234,7 @@ void NmpcNavigationRos::visualize_local_traj_ref()
     pub_vis_local_traj_->publish(marker_array);
 }
 
-void NmpcNavigationRos::visualize_local_traj_lib()
-{
+void NmpcNavigationRos::visualize_local_traj_lib() {
     const std::vector<std::vector<nmpcnav::LocalTrajectory>>& local_traj_lib = nmpc_navigation_.getLocalTrajectoryLib();
     
     visualization_msgs::msg::MarkerArray marker_array;
@@ -216,15 +244,15 @@ void NmpcNavigationRos::visualize_local_traj_lib()
     dots.ns = "local_traj_lib_points";
     dots.type = visualization_msgs::msg::Marker::POINTS;
     dots.action = visualization_msgs::msg::Marker::ADD;
-    dots.header.stamp = rclcpp::Clock().now();
+    dots.header.stamp = this->get_clock()->now();
     dots.scale.x = 0.025;
     dots.scale.y = 0.025;
     dots.scale.z = 0.025;
     dots.color.a = 1.0;
     dots.color.b = 1.0;
 
-    for(int i = 0; i < local_traj_lib.size(); ++i) {
-        for(int j = 0; j < local_traj_lib[i].size(); ++j) {
+    for(size_t i = 0; i < local_traj_lib.size(); ++i) {
+        for(size_t j = 0; j < local_traj_lib[i].size(); ++j) {
             nmpcnav::LocalTrajectory local_traj = local_traj_lib[i][j];
             for (int k = 0; k < local_traj.X.size(); ++k) {
                 geometry_msgs::msg::Point p;
@@ -239,8 +267,7 @@ void NmpcNavigationRos::visualize_local_traj_lib()
     pub_vis_local_traj_->publish(marker_array);
 }
 
-void NmpcNavigationRos::odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr odom_msg)
-{
+void NmpcNavigationRos::odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr odom_msg) {
     nmpcnav::State x0 = {odom_msg->pose.pose.position.x, odom_msg->pose.pose.position.y, 2*acos(odom_msg->pose.pose.orientation.w)};
     nmpcnav::Input nmpc_sol = nmpc_navigation_.runNavigationPipeline(x0);
     
@@ -253,15 +280,13 @@ void NmpcNavigationRos::odom_callback(const nav_msgs::msg::Odometry::ConstShared
     pub_drive_->publish(drive_msg);
 }
 
-void NmpcNavigationRos::target_pos_callback(const geometry_msgs::msg::Point::ConstSharedPtr target_pos_msg)
-{
+void NmpcNavigationRos::target_pos_callback(const geometry_msgs::msg::Point::ConstSharedPtr target_pos_msg) {
     nmpc_navigation_.setTargetPosition(target_pos_msg->x, target_pos_msg->y);
     visualize_global_path();
     RCLCPP_INFO(this->get_logger(), "A new target position was set: x=%d, y=%d", target_pos_msg->x, target_pos_msg->y);
 }
 
-void NmpcNavigationRos::map_callback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr map_msg)
-{
+void NmpcNavigationRos::map_callback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr map_msg) {
     RCLCPP_INFO(this->get_logger(), "A new map was recieved!");
     auto map_copy = std::make_shared<nav_msgs::msg::OccupancyGrid>(*map_msg);
     gridutils::inflateGrid(*map_copy, 0.20);

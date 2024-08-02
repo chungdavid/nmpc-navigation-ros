@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.h"
+#include <nav_msgs/msg/occupancy_grid.hpp>
 
 namespace nmpcnav {
 
@@ -11,7 +12,7 @@ public:
     NmpcNavigation(Config config);
     ~NmpcNavigation();
 
-    void setGlobalPath(std::vector<double>& x_in, std::vector<double>& y_in);
+    void setGlobalPath(const std::vector<double>& x_in, const std::vector<double>& y_in);
     const GlobalPath& getGlobalPath() const;
 
     void setTargetPosition(double target_x, double target_y);
@@ -20,6 +21,8 @@ public:
     const std::vector<std::vector<LocalTrajectory>>& getLocalTrajectoryLib() const;
 
     Input runNavigationPipeline(const State& x0);
+
+    void setMap(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr map);
 
 private:
     double Ts_;
@@ -43,8 +46,18 @@ private:
     Model model_;
 
     std::vector<std::vector<LocalTrajectory>> local_traj_lib_;
+
+    Eigen::DiagonalMatrix<double, NX> QN_;
+    Eigen::DiagonalMatrix<double, NX> Qk_;
+    Eigen::DiagonalMatrix<double, NU> R_;
+
+    nav_msgs::msg::OccupancyGrid::ConstSharedPtr map_;
+    
+    bool has_target_pos_;
+
     void create_local_traj_lib();
     void select_local_traj();
+    void run_mpc();
 };
 
 

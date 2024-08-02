@@ -92,7 +92,7 @@ inline bool isCircleCollisionFree(const nav_msgs::msg::OccupancyGrid& grid,
 inline bool isTrajectoryCollisionFree(const nav_msgs::msg::OccupancyGrid& grid,
                                const Eigen::VectorXd& X,
                                const Eigen::VectorXd& Y,
-                               double radius,
+                               double radius = 1.0,
                                int threshold = 50) {
     
     const int n = static_cast<int>(X.size());

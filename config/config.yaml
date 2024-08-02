@@ -3,23 +3,33 @@ nmpc_navigation_ros:
     node_config:
       drive_topic: "/drive"
       odom_topic: "/ego_racecar/odom"
+      map_topic: "/map"
       vis_global_path_topic: "/vis_global_path"
       vis_local_traj_topic: "/vis_local_traj"
 
       target_pos_topic: "/target_pos" # read a target pos from target_pos_topic, and generate a global path to it
       use_csv_global_path: true # alternatively, use a precomputed global path
-      global_path_csv_filename: "/sim_ws/src/f1tenth_gym_ros/maps/Budapest_centerline.csv"
+      global_path_csv_filename: "/sim_ws/src/f1tenth_gym_ros/maps/e7_floor5.csv"
 
     nmpc_config:
-      car_max_speed: 8.0
-      car_max_steering_angle: 1.25
-      car_max_accel: 24.0
-      car_max_deccel: 30.0
-      car_max_yaw_rate: 5.0
+      car_max_speed: 2.0
+      car_max_steering_angle: 0.70
+      car_max_accel: 5.0
+      car_max_deccel: 6.0
+      car_max_yaw_rate: 6.0
       car_length_front: 0.1651
       car_length_rear: 0.1651
 
       nmpc_time_step: 0.05 # should be the same as the odom_callback
-      nmpc_control_horizon: 20
-      traj_lib_num_speed: 30
-      traj_lib_num_steer: 30
+      nmpc_control_horizon: 25
+      traj_lib_num_speed: 15
+      traj_lib_num_steer: 20
+
+      QN_X: 10.0
+      QN_Y: 10.0
+      QN_phi: 2.0
+      Qk_X: 2.0
+      Qk_Y: 2.0
+      Qk_phi: 0.5
+      R_v: 0.1
+      R_delta: 0.8
