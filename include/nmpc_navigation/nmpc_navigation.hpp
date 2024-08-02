@@ -43,8 +43,13 @@ private:
     Model model_;
 
     std::vector<std::vector<LocalTrajectory>> local_traj_lib_;
+
+    Eigen::DiagonalMatrix<double, NX> Q_;
+    Eigen::DiagonalMatrix<double, NU> R_;
+
     void create_local_traj_lib();
     void select_local_traj();
+    void run_mpc();
 };
 
 

@@ -34,7 +34,7 @@ NmpcNavigationRos::NmpcNavigationRos()
     std::string global_path_csv_filename = this->get_parameter("node_config.global_path_csv_filename").as_string();
 
     // Create publishers and subscribers
-    pub_drive_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic_, 10);
+    pub_drive_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic_, 1);
     sub_odom_ = this->create_subscription<nav_msgs::msg::Odometry>(odom_topic_, 1, std::bind(&NmpcNavigationRos::odom_callback, this, _1));
     pub_vis_global_path_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(vis_global_path_topic_, 10);
     pub_vis_local_traj_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(vis_local_traj_topic_, 10);
@@ -70,6 +70,12 @@ nmpcnav::Config NmpcNavigationRos::get_nmpc_config()
     this->declare_parameter("nmpc_config.traj_lib_num_speed", 30);
     this->declare_parameter("nmpc_config.traj_lib_num_steer", 30);
 
+    this->declare_parameter("nmpc_config.Q_X", 1.0);
+    this->declare_parameter("nmpc_config.Q_Y", 1.0);
+    this->declare_parameter("nmpc_config.Q_phi", 1.0);
+    this->declare_parameter("nmpc_config.R_v", 1.0);
+    this->declare_parameter("nmpc_config.R_delta", 1.0);
+
     double v_max = this->get_parameter("nmpc_config.car_max_speed").as_double();
     double delta_max = this->get_parameter("nmpc_config.car_max_steering_angle").as_double();
     double accel_max = this->get_parameter("nmpc_config.car_max_accel").as_double();
@@ -83,6 +89,12 @@ nmpcnav::Config NmpcNavigationRos::get_nmpc_config()
     int lib_num_v = this->get_parameter("nmpc_config.traj_lib_num_speed").as_int();
     int lib_num_delta = this->get_parameter("nmpc_config.traj_lib_num_steer").as_int();
 
+    double Q_X = this->get_parameter("nmpc_config.Q_X").as_double();
+    double Q_Y = this->get_parameter("nmpc_config.Q_Y").as_double();
+    double Q_phi = this->get_parameter("nmpc_config.Q_phi").as_double();
+    double R_v = this->get_parameter("nmpc_config.R_v").as_double();
+    double R_delta = this->get_parameter("nmpc_config.R_delta").as_double();
+
     // Init main program nmpc_navigation_ with params
     nmpcnav::Config nmpc_config {
         v_max,
@@ -95,7 +107,12 @@ nmpcnav::Config NmpcNavigationRos::get_nmpc_config()
         Ts,
         N,
         lib_num_v,
-        lib_num_delta
+        lib_num_delta,
+        Q_X,
+        Q_Y,
+        Q_phi, 
+        R_v,
+        R_delta 
     };
 
     return nmpc_config;
@@ -187,9 +204,9 @@ void NmpcNavigationRos::visualize_local_traj_ref()
     dots.type = visualization_msgs::msg::Marker::POINTS;
     dots.action = visualization_msgs::msg::Marker::ADD;
     dots.header.stamp = rclcpp::Clock().now();    
-    dots.scale.x = 0.1;
-    dots.scale.y = 0.1;
-    dots.scale.z = 0.1;
+    dots.scale.x = 0.025;
+    dots.scale.y = 0.025;
+    dots.scale.z = 0.025;
     dots.color.a = 1.0;
     dots.color.r = 1.0;
 

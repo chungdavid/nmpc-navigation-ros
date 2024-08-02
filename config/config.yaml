@@ -8,10 +8,10 @@ nmpc_navigation_ros:
 
       target_pos_topic: "/target_pos" # read a target pos from target_pos_topic, and generate a global path to it
       use_csv_global_path: true # alternatively, use a precomputed global path
-      global_path_csv_filename: "/sim_ws/src/f1tenth_gym_ros/maps/Budapest_centerline.csv"
+      global_path_csv_filename: "/sim_ws/src/f1tenth_gym_ros/maps/e7_floor5.csv"
 
     nmpc_config:
-      car_max_speed: 8.0
+      car_max_speed: 2.0
       car_max_steering_angle: 1.25
       car_max_accel: 24.0
       car_max_deccel: 30.0
@@ -23,3 +23,9 @@ nmpc_navigation_ros:
       nmpc_control_horizon: 20
       traj_lib_num_speed: 30
       traj_lib_num_steer: 30
+
+      Q_X: 100.0
+      Q_Y: 100.0
+      Q_phi: 0.1
+      R_v: 2.0
+      R_delta: 2.0

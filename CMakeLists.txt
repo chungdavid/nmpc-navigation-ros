@@ -25,7 +25,8 @@ foreach(PACKAGE
   geometry_msgs
   nav_msgs
   ackermann_msgs
-  visualization_msgs)
+  visualization_msgs
+  OsqpEigen)
   find_package(${PACKAGE} REQUIRED)
 endforeach()
 
@@ -33,6 +34,7 @@ include_directories(include)
 
 add_library(nmpc_navigation src/nmpc_navigation.cpp)
 target_include_directories(nmpc_navigation PUBLIC ${Eigen3_INCLUDE_DIRS})
+target_link_libraries(nmpc_navigation OsqpEigen::OsqpEigen)
 
 add_library(nmpc_navigation_ros src/nmpc_navigation_ros.cpp)
 ament_target_dependencies(nmpc_navigation_ros
