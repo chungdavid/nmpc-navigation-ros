@@ -13,10 +13,11 @@ NmpcNavigation::NmpcNavigation(Config config)
       LIB_NUM_V(config.lib_num_v), LIB_NUM_DELTA(config.lib_num_delta),
       L_F(config.l_f), L_R(config.l_r),
       model_(config.Ts, config.l_f, config.l_r),
-      local_traj_lib_(config.lib_num_v, std::vector<LocalTrajectory>(config.lib_num_delta + 1)),
-      Q_(config.Q_X, config.Q_Y, config.Q_phi), R_(config.R_v, config.R_delta)
+      local_traj_lib_(config.lib_num_v, std::vector<LocalTrajectory>(config.lib_num_delta + 1))
 {
     create_local_traj_lib();
+    Q_.diagonal() << config.Q_X, config.Q_Y, config.Q_phi;
+    R_.diagonal() << config.R_v, config.R_delta;
     std::cout << "NmpcNavigation fully initialized! \n"; 
 }
 
@@ -99,6 +100,8 @@ void NmpcNavigation::select_local_traj()
     local_traj_ref_.X = transformed_x_y_points.row(0).transpose();
     local_traj_ref_.Y = transformed_x_y_points.row(1).transpose();
     local_traj_ref_.phi = best_traj.phi.array() + curr_state_.phi;
+    local_traj_ref_.input_ref.v = best_traj.input_ref.v;
+    local_traj_ref_.input_ref.delta = best_traj.input_ref.delta;
 }
 
 const LocalTrajectory& NmpcNavigation::getLocalTrajectoryRef() const { return local_traj_ref_; }
@@ -175,12 +178,12 @@ void NmpcNavigation::run_mpc() {
 
         // TO DO: Calculate lower & upper inequalities for x
         // I just set them to arbitrary values for now
-        Eigen::VectorXd x_min(NX);
-        Eigen::VectorXd x_max(NX);
-        x_min << -Osqp::INFTY, -Osqp::INFTY, -Osqp::INFTY;
-        x_max <<  Osqp::INFTY, Osqp::INFTY, Osqp::INFTY;
-        lower_bound.segment<NX>(NX * (N_ + 1) + NX * i) << x_min;
-        upper_bound.segment<NX>(NX * (N_ + 1) + NX * i) << x_max;
+        Eigen::VectorXd x_k_min(NX);
+        Eigen::VectorXd x_k_max(NX);
+        x_k_min << -OsqpEigen::INFTY, -OsqpEigen::INFTY, -OsqpEigen::INFTY;
+        x_k_max << OsqpEigen::INFTY, OsqpEigen::INFTY, OsqpEigen::INFTY;
+        lower_bound.segment<NX>(NX * (N_ + 1) + NX * i) << x_k_min;
+        upper_bound.segment<NX>(NX * (N_ + 1) + NX * i) << x_k_max;
     }
 
     // Constraint on initial conditions
@@ -189,12 +192,22 @@ void NmpcNavigation::run_mpc() {
     lower_bound.head(NX) = -x0;
     upper_bound.head(NX) = -x0;
 
+    Eigen::VectorXd u0_min(NU);
+    Eigen::VectorXd u0_max(NU);
+    u0_min << std::max(V_MAX / LIB_NUM_V, curr_input_.v - Ts_ * DECCEL_MAX),
+             std::max(-DELTA_MAX, -atan(YAW_RATE_MAX * (L_F + L_R) / curr_input_.v));
+    u0_max << std::min(V_MAX, curr_input_.v + Ts_ * ACCEL_MAX),
+              std::min(DELTA_MAX, atan(YAW_RATE_MAX * (L_F + L_R) / curr_input_.v));
+
+    lower_bound.segment<NU>(NX * (N_ + 1) + NX * (N_ + 1)) << u0_min;
+    upper_bound.segment<NU>(NX * (N_ + 1) + NX * (N_ + 1)) << u0_max;
+
     // Upper and lower input constraints
     Eigen::VectorXd u_k_min(NU);
     Eigen::VectorXd u_k_max(NU);
     u_k_min << 0.0, -DELTA_MAX;
     u_k_max << V_MAX, DELTA_MAX;
-    for(int i = 0; i < N_; ++i) {
+    for(int i = 1; i < N_; ++i) {
         lower_bound.segment<NU>(NX * (N_ + 1) + NX * (N_ + 1) + i * NU) << u_k_min;
         upper_bound.segment<NU>(NX * (N_ + 1) + NX * (N_ + 1) + i * NU) << u_k_max;
     }
@@ -229,7 +242,6 @@ void NmpcNavigation::run_mpc() {
     Eigen::VectorXd QP_solution;
     QP_solution = solver.getSolution();
 
-    std::cout << "The QP solution has dimensions " << QP_solution.rows() << " x " << QP_solution.cols() << std::endl;
     curr_input_.v = QP_solution(NX * (N_ + 1));
     curr_input_.delta = QP_solution(NX * (N_ + 1) + 1);
 
