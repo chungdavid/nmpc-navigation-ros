@@ -1,11 +1,15 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <unsupported/Eigen/MatrixFunctions>
 #include <vector>
 #include <iostream>
 
 namespace nmpcnav {
 
+
+constexpr int NX = 3; // number of states
+constexpr int NU = 2; // number of inputs
 
 struct State {
     double X; // x position in map frame
@@ -35,6 +39,7 @@ struct LocalTrajectory {
     Eigen::VectorXd X;
     Eigen::VectorXd Y;
     Eigen::VectorXd phi;
+    Input input_ref;
 
     LocalTrajectory() : X(0), Y(0), phi(0) {};
     LocalTrajectory(int N) : X(N), Y(N), phi(N) {};
@@ -106,25 +111,64 @@ struct Model {
 
     // Simulate a trajectory in the vehicle's coordinate frame
     LocalTrajectory simulateLocalTrajectory(int N, Input input) {
-        LocalTrajectory traj(N);
+        LocalTrajectory traj(N + 1);
         double dx, dy;
         double dphi = input.v * tan(input.delta) / (L_F + L_R);
 
         // Populate the first point in the trajectory
-        traj.X(0) = Ts * input.v;
+        traj.X(0) = 0;
         traj.Y(0) = 0;
-        traj.phi(0) = Ts * dphi;
+        traj.phi(0) = 0;
 
         // Populate the rest of the trajectory from second point to N
-        for(int i = 0; i < N - 1; ++i) {
+        for(int i = 0; i < N; ++i) {
             dx = input.v * cos(traj.phi(i));
             dy = input.v * sin(traj.phi(i));
             traj.X(i+1) = traj.X(i) + Ts*dx;
             traj.Y(i+1) = traj.Y(i) + Ts*dy;
             traj.phi(i+1) = traj.phi(i) + Ts*dphi;
         }
+
+        traj.input_ref = input;
         return traj;
     }
+
+    void getLinearModel(Eigen::Matrix<double,NX,NX>& A_d, Eigen::Matrix<double,NX,NU>& B_d, Eigen::Matrix<double,NX,1>& g_d, const Eigen::Matrix<double,NX,1>& x_bar, const Eigen::Matrix<double,NU,1>& u_bar) {
+        // Linearized kinematic bicycle model
+        // Get matrices A, B, g where x_dot = Ax + Bu + g
+        Eigen::MatrixXd A(NX, NX);
+        Eigen::MatrixXd B(NX, NU);
+        A << 0, 0, -u_bar(0) * sin(x_bar(2)),
+             0, 0, u_bar(0) * cos(x_bar(2)),
+             0, 0, 0;
+        B << cos(x_bar(2)), 0,
+             sin(x_bar(2)), 0,
+             tan(u_bar(1)) / (L_F + L_R), u_bar(0) / (cos(u_bar(1)) * cos(u_bar(1)) * (L_F + L_R));
+
+        // Eigen::MatrixXd x_bar_vec(NX, 1);
+        // Eigen::MatrixXd u_bar_vec(NU, 1);
+        Eigen::MatrixXd f(NX, 1);
+        Eigen::MatrixXd g(NX, 1);
+        // x_bar_vec << x_bar(0), x_bar(1), x_bar.phi;
+        // u_bar_vec << u_bar.v, u_bar.delta;
+        f << u_bar(0) * cos(x_bar(2)), u_bar(0) * sin(x_bar(2)), u_bar(0) * tan(u_bar(1)) / (L_F + L_R);
+        g << f - (A * x_bar + B * u_bar);
+
+        // Discretize
+        Eigen::MatrixXd aux(NX + NU + 1, NX + NU + 1);
+        aux.setZero();
+
+        aux.block(0, 0, NX, NX) = A;
+        aux.block(0, NX, NX, NU) = B;
+        aux.block(0, NX + NU, NX, 1) = g;
+
+        aux *= Ts;
+        Eigen::MatrixXd exp_aux = aux.exp();
+
+        A_d = exp_aux.block(0, 0, NX, NX);
+        B_d = exp_aux.block(0, NX, NX, NU);
+        g_d = exp_aux.block(0, NX + NU, NX, 1);
+    } 
 };
 
 struct Config {
@@ -139,6 +183,11 @@ struct Config {
     int N;
     int lib_num_v;
     int lib_num_delta;
+    double Q_X;
+    double Q_Y;
+    double Q_phi; 
+    double R_v;
+    double R_delta; 
 };
 
 
