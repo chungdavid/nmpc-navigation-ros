@@ -1,4 +1,5 @@
 #include "nmpc_navigation/nmpc_navigation_ros.hpp"
+#include "nmpc_navigation/grid_utils.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -257,4 +258,12 @@ void NmpcNavigationRos::target_pos_callback(const geometry_msgs::msg::Point::Con
     nmpc_navigation_.setTargetPosition(target_pos_msg->x, target_pos_msg->y);
     visualize_global_path();
     RCLCPP_INFO(this->get_logger(), "A new target position was set: x=%d, y=%d", target_pos_msg->x, target_pos_msg->y);
+}
+
+void NmpcNavigationRos::map_callback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr map_msg)
+{
+    RCLCPP_INFO(this->get_logger(), "A new map was recieved!");
+    auto map_copy = std::make_shared<nav_msgs::msg::OccupancyGrid>(*map_msg);
+    gridutils::inflateGrid(*map_copy, 0.20);
+    nmpc_navigation_.setMap(map_copy);
 }
