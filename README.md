@@ -62,6 +62,9 @@ The robot's behaviour is governed by a state machine:
 ## Implementation
 The idea was to plan a global path when a target position is published to the `/target_pos` topic. However, the global planner was not implemented and a precomputed global path was loaded by setting `use_csv_global_path: true` and `global_path_csv_filename: path/to/csv` in the `config.yaml`. Drive commands are published to the `/drive` topic. The state machine is also not implemented.  
 
+## Observations
+To select the local trajectory, we determine the closest point on the global path for each candidate trajectory's terminal state, and choose the trajectory corresponding to the furthest point. However, this method causes the car to literally (attempt to) "cut corners" on turns as shown in the gif. Perhaps we should also consider how close a local trajectory is to the global path when selecting from candidate trajectories.
+
 ## Environment Setup
 **ROS Version**: Foxy <br>
 **System Requirements**: Ubuntu 20.04 (or with Docker)
